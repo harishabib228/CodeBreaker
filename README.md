@@ -174,41 +174,6 @@ for start in range(len(scrambled)):
 
 ---
 
-## GitHub Commit Workflow
-
-Commit in algorithm-first order to show progression:
-
-```bash
-git init
-
-git add trie.py
-git commit -m "feat: base Trie (insert/search/suggestions/prefix_scan/delete)"
-
-git add trie.py
-git commit -m "feat: CommandTrie, FileSystemTrie, LexiconTrie specialisations"
-
-git add world.py
-git commit -m "feat: game world — virtual filesystem, command registry, cipher lexicon, missions"
-
-git add engine.py
-git commit -m "feat: game engine — state machine, command handlers, Trie-driven mechanics"
-
-git add server.py main.py
-git commit -m "feat: local HTTP server + JSON API (stdlib, zero deps)"
-
-git add index.html
-git commit -m "feat: full GUI — hacker terminal, autocomplete sidebar, Trie visualiser"
-
-git add README.md .gitignore
-git commit -m "docs: architecture diagram, complexity analysis, presentation guide"
-
-git remote add origin https://github.com/YOUR_USERNAME/codebreaker.git
-git branch -M main
-git push -u origin main
-```
-
----
-
 ## Presentation Guide (15–20 min)
 
 **1. Algorithm first (5 min)**
