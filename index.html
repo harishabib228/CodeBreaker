@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodeBreaker — NEXUS-7 Intrusion Terminal</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+  :root {
+    --bg:       #080c10;
+    --panel:    #0d1117;
+    --border:   #1a2a1a;
+    --accent:   #00ff41;
+    --accent2:  #00c832;
+    --red:      #ff3c3c;
+    --yellow:   #ffd700;
+    --cyan:     #00e5ff;
+    --magenta:  #d400ff;
+    --dim:      #3a5a3a;
+    --text:     #c8e6c9;
+    --header:   #00ff41;
+    --success:  #00ff41;
+    --error:    #ff3c3c;
+    --warn:     #ffd700;
+    --data:     #00e5ff;
+    --glow:     0 0 8px #00ff4180;
+    --glow-strong: 0 0 20px #00ff4160, 0 0 40px #00ff4120;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    font-size: 13px;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── scanline overlay ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 9999;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+  }
+
+  /* ── layout ── */
+  #app {
+    display: grid;
+    grid-template-rows: 56px 1fr 60px;
+    grid-template-columns: 1fr 280px;
+    height: 100vh;
+    gap: 0;
+  }
+
+  /* ── header ── */
+  #header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    background: #020804;
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    gap: 20px;
+  }
+
+  #logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--accent);
+    text-shadow: var(--glow);
+    letter-spacing: 3px;
+    white-space: nowrap;
+  }
+
+  #logo span { color: #fff; }
+
+  .header-sep { flex: 1; }
+
+  .hstat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 16px;
+    border-left: 1px solid var(--border);
+  }
+  .hstat-label { font-size: 9px; color: var(--dim); letter-spacing: 2px; }
+  .hstat-val   { font-size: 15px; color: var(--accent); font-weight: bold; text-shadow: var(--glow); }
+
+  #mission-badge {
+    background: #0a1a0a;
+    border: 1px solid var(--dim);
+    padding: 4px 14px;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--dim);
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #mission-badge.active { color: var(--accent); border-color: var(--accent); box-shadow: var(--glow); }
+
+  /* ── main output pane ── */
+  #output-pane {
+    grid-row: 2;
+    grid-column: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    scroll-behavior: smooth;
+  }
+
+  #output-pane::-webkit-scrollbar { width: 4px; }
+  #output-pane::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 2px; }
+
+  .line {
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+    animation: fadein 0.1s ease;
+  }
+  @keyframes fadein { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; } }
+
+  .line.normal  { color: var(--text); }
+  .line.success { color: var(--success); }
+  .line.error   { color: var(--error); }
+  .line.warn    { color: var(--warn); }
+  .line.accent  { color: var(--cyan); }
+  .line.dim     { color: var(--dim); }
+  .line.header  { color: var(--magenta); font-weight: bold; }
+  .line.data    { color: var(--data); }
+  .line.cmd     { color: var(--accent); font-weight: bold; margin-top: 8px; }
+
+  /* ── sidebar ── */
+  #sidebar {
+    grid-row: 2;
+    grid-column: 2;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    overflow: hidden;
+  }
+
+  .sidebar-section {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--dim);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sidebar-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* autocomplete */
+  #suggest-list { display: flex; flex-direction: column; gap: 3px; min-height: 28px; }
+
+  .suggest-item {
+    padding: 4px 10px;
+    font-size: 12px;
+    color: var(--dim);
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.1s;
+    border-radius: 2px;
+  }
+  .suggest-item:hover,
+  .suggest-item.top {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: #0a1a0a;
+    text-shadow: var(--glow);
+  }
+  .suggest-item .match { color: var(--accent); }
+
+  /* objectives */
+  #obj-list { display: flex; flex-direction: column; gap: 6px; }
+
+  .obj-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    font-size: 11px;
+    line-height: 1.4;
+    padding: 4px 0;
+  }
+  .obj-mark {
+    flex-shrink: 0;
+    width: 14px;
+    color: var(--dim);
+    margin-top: 1px;
+  }
+  .obj-item.done .obj-mark  { color: var(--success); }
+  .obj-item.done .obj-desc  { color: var(--dim); text-decoration: line-through; }
+  .obj-desc { color: var(--text); }
+
+  /* filesystem */
+  #fs-path {
+    font-size: 11px;
+    color: var(--cyan);
+    margin-bottom: 8px;
+    padding: 4px 8px;
+    background: #0a1a1a;
+    border-radius: 2px;
+  }
+  #fs-list { display: flex; flex-direction: column; gap: 2px; max-height: 160px; overflow-y: auto; }
+  #fs-list::-webkit-scrollbar { width: 3px; }
+  #fs-list::-webkit-scrollbar-thumb { background: var(--dim); }
+
+  .fs-item {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 3px 6px;
+    font-size: 11px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .fs-item:hover { background: #0a1a0a; }
+  .fs-item.locked { color: var(--warn); }
+  .fs-item.dir    { color: var(--accent); }
+  .fs-item.file   { color: var(--dim); }
+  .fs-icon        { font-size: 11px; }
+
+  /* trie viz */
+  #trie-canvas-wrap {
+    flex: 1;
+    padding: 10px 14px;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .sidebar-title.trie-title { margin-bottom: 6px; }
+  #trie-canvas {
+    width: 100%;
+    height: 100%;
+    min-height: 120px;
+  }
+
+  /* ── input bar ── */
+  #input-bar {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    display: flex;
+    align-items: center;
+    background: #020804;
+    border-top: 1px solid var(--border);
+    padding: 0 16px;
+    gap: 10px;
+  }
+
+  #prompt {
+    color: var(--accent);
+    white-space: nowrap;
+    font-size: 13px;
+    text-shadow: var(--glow);
+    flex-shrink: 0;
+  }
+
+  #cmd-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    caret-color: var(--accent);
+  }
+
+  #tab-hint {
+    font-size: 10px;
+    color: var(--dim);
+    white-space: nowrap;
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 2px;
+  }
+
+  /* ── puzzle overlay ── */
+  #puzzle-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  #puzzle-overlay.active { display: flex; }
+
+  #puzzle-box {
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    box-shadow: var(--glow-strong);
+    padding: 32px 40px;
+    width: 560px;
+    max-width: 90vw;
+    animation: slidein 0.2s ease;
+  }
+  @keyframes slidein { from { transform: translateY(-20px); opacity: 0; } }
+
+  #puzzle-box h2 {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    letter-spacing: 3px;
+    color: var(--magenta);
+    margin-bottom: 20px;
+  }
+  #puzzle-cipher {
+    background: #000;
+    border: 1px solid var(--dim);
+    padding: 14px 16px;
+    font-size: 20px;
+    letter-spacing: 4px;
+    color: var(--warn);
+    margin-bottom: 16px;
+    word-break: break-all;
+  }
+  #puzzle-frags {
+    font-size: 11px;
+    color: var(--dim);
+    margin-bottom: 12px;
+    line-height: 1.8;
+  }
+  #puzzle-frags span { color: var(--data); margin-right: 10px; }
+  #puzzle-hint {
+    color: var(--text);
+    font-size: 12px;
+    margin-bottom: 20px;
+    padding: 8px 12px;
+    border-left: 3px solid var(--warn);
+  }
+  #puzzle-input-wrap {
+    display: flex;
+    gap: 10px;
+  }
+  #puzzle-input {
+    flex: 1;
+    background: #000;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 16px;
+    padding: 10px 14px;
+    outline: none;
+    caret-color: var(--accent);
+  }
+  #puzzle-submit {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 10px 20px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: opacity 0.1s;
+  }
+  #puzzle-submit:hover { opacity: 0.8; }
+  #puzzle-feedback {
+    margin-top: 12px;
+    font-size: 12px;
+    min-height: 18px;
+    transition: color 0.2s;
+  }
+
+  /* ── boot screen ── */
+  #boot-screen {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+  #boot-logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 32px;
+    font-weight: 900;
+    color: var(--accent);
+    text-shadow: var(--glow-strong);
+    letter-spacing: 8px;
+    margin-bottom: 32px;
+  }
+  .boot-line {
+    width: 480px;
+    max-width: 90vw;
+    opacity: 0;
+    animation: bootline 0.3s ease forwards;
+    line-height: 1.7;
+  }
+  @keyframes bootline { to { opacity: 1; } }
+  #boot-bar-wrap {
+    width: 480px;
+    max-width: 90vw;
+    height: 3px;
+    background: #0a1a0a;
+    margin: 16px 0 8px;
+    border-radius: 2px;
+  }
+  #boot-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    box-shadow: var(--glow);
+    transition: width 0.4s ease;
+    border-radius: 2px;
+  }
+
+  /* ── game over overlay ── */
+  #gameover-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.9);
+    z-index: 3000;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  #gameover-overlay.active { display: flex; }
+  #gameover-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 36px;
+    font-weight: 900;
+    letter-spacing: 6px;
+  }
+  #gameover-title.won { color: var(--accent); text-shadow: var(--glow-strong); }
+  #gameover-title.lost { color: var(--red); }
+  #gameover-stats { color: var(--text); font-size: 14px; text-align: center; line-height: 2; }
+  #gameover-btn {
+    margin-top: 16px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    padding: 12px 32px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  #gameover-btn:hover { background: #0a2a0a; }
+
+  /* scrollbar global */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* pulse animation for active elements */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .blink { animation: pulse 1.2s infinite; }
+</style>
+</head>
+<body>
+
+<!-- ── Boot screen ── -->
+<div id="boot-screen">
+  <div id="boot-logo">CODEBREAKER</div>
+  <div id="boot-lines"></div>
+  <div id="boot-bar-wrap"><div id="boot-bar"></div></div>
+  <div id="boot-status" style="color:var(--dim);font-size:11px;letter-spacing:2px;"></div>
+</div>
+
+<!-- ── Puzzle overlay ── -->
+<div id="puzzle-overlay">
+  <div id="puzzle-box">
+    <h2>⬡ CIPHER CRACK MODULE</h2>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:10px;letter-spacing:2px;">INTERCEPTED CIPHER STRING</div>
+    <div id="puzzle-cipher"></div>
+    <div id="puzzle-frags"></div>
+    <div id="puzzle-hint"></div>
+    <div id="puzzle-input-wrap">
+      <input id="puzzle-input" type="text" placeholder="enter decoded word..." autocomplete="off" spellcheck="false">
+      <button id="puzzle-submit">CRACK</button>
+    </div>
+    <div id="puzzle-feedback"></div>
+  </div>
+</div>
+
+<!-- ── Game Over overlay ── -->
+<div id="gameover-overlay">
+  <div id="gameover-title"></div>
+  <div id="gameover-stats"></div>
+  <button id="gameover-btn" onclick="resetGame()">RECONNECT TO NEXUS-7</button>
+</div>
+
+<!-- ── Main app ── -->
+<div id="app">
+
+  <!-- header -->
+  <div id="header">
+    <div id="logo">⬡ CODE<span>BREAKER</span></div>
+    <div style="font-size:10px;color:var(--dim);letter-spacing:1px;">// NEXUS-7 INTRUSION TERMINAL</div>
+    <div class="header-sep"></div>
+    <div id="mission-badge" class="active">MISSION 1: FIRST CONTACT</div>
+    <div class="hstat">
+      <div class="hstat-label">SCORE</div>
+      <div class="hstat-val" id="stat-score">0</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-label">CMDS</div>
+      <div class="hstat-val" id="stat-cmds">0</div>
+    </div>
+  </div>
+
+  <!-- output pane -->
+  <div id="output-pane"></div>
+
+  <!-- sidebar -->
+  <div id="sidebar">
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">AUTOCOMPLETE</div>
+      <div id="suggest-list">
+        <div class="suggest-item dim" style="font-size:11px;padding:4px 10px;">type a command…</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">OBJECTIVES</div>
+      <div id="obj-list"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">FILESYSTEM</div>
+      <div id="fs-path">/ </div>
+      <div id="fs-list"></div>
+    </div>
+
+    <div class="trie-canvas-wrap sidebar-section" style="flex:1;min-height:0;display:flex;flex-direction:column;">
+      <div class="sidebar-title trie-title">TRIE VISUALISER</div>
+      <canvas id="trie-canvas"></canvas>
+    </div>
+
+  </div>
+
+  <!-- input bar -->
+  <div id="input-bar">
+    <div id="prompt">nexus@breach:/ ►</div>
+    <input id="cmd-input" type="text" autocomplete="off" spellcheck="false"
+           placeholder="enter command…" autofocus>
+    <div id="tab-hint">TAB autocomplete</div>
+  </div>
+
+</div>
+
+<script>
+// ──────────────────────────────────────────────────────────────────────────────
+// State
+// ──────────────────────────────────────────────────────────────────────────────
+let history = [];
+let histIdx  = -1;
+let gameState = null;
+let trieNodes = [];   // for canvas visualiser
+let currentPrefix = "";
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Boot sequence
+// ──────────────────────────────────────────────────────────────────────────────
+const BOOT_MSGS = [
+  {t:"dim",    m:"  Initialising NEXUS-7 breach protocol..."},
+  {t:"normal", m:"  Loading Trie prefix engine..."},
+  {t:"success",m:"  ✓  CommandTrie    [ 16 commands indexed ]"},
+  {t:"success",m:"  ✓  FileSystemTrie [ virtual filesystem mounted ]"},
+  {t:"success",m:"  ✓  LexiconTrie    [ 98 cipher words loaded ]"},
+  {t:"warn",   m:"  ⚠  FIREWALL DETECTED — initiating bypass..."},
+  {t:"success",m:"  ✓  Connection established to NEXUS-7"},
+];
+
+async function boot() {
+  const wrap = document.getElementById('boot-lines');
+  const bar  = document.getElementById('boot-bar');
+  const stat = document.getElementById('boot-status');
+
+  for (let i = 0; i < BOOT_MSGS.length; i++) {
+    const {t, m} = BOOT_MSGS[i];
+    const d = document.createElement('div');
+    d.className = `boot-line`;
+    d.style.color = {dim:'#3a5a3a',normal:'#c8e6c9',success:'#00ff41',warn:'#ffd700'}[t];
+    d.style.animationDelay = `${i * 0.08}s`;
+    d.textContent = m;
+    wrap.appendChild(d);
+    bar.style.width = `${((i+1)/BOOT_MSGS.length)*100}%`;
+    await sleep(110);
+  }
+  stat.textContent = 'READY';
+  await sleep(400);
+
+  // Fetch initial state
+  gameState = await fetch('/api/state').then(r => r.json());
+
+  document.getElementById('boot-screen').style.transition = 'opacity 0.5s';
+  document.getElementById('boot-screen').style.opacity = '0';
+  await sleep(500);
+  document.getElementById('boot-screen').style.display = 'none';
+
+  // Welcome output
+  printLines([
+    {text:'', style:'normal'},
+    {text:'  ╔══════════════════════════════════════════════════╗', style:'header'},
+    {text:'  ║   C O D E B R E A K E R   //   v 2 . 4 . 1      ║', style:'header'},
+    {text:'  ║   NEXUS-7 Intrusion Terminal  —  Trie Engine      ║', style:'header'},
+    {text:'  ╚══════════════════════════════════════════════════╝', style:'header'},
+    {text:'', style:'normal'},
+    {text:"  Type 'help' to list commands.", style:'normal'},
+    {text:"  Type 'status' to see mission objectives.", style:'dim'},
+    {text:"  [TAB] autocomplete  |  [↑↓] history  |  Click sidebar items to insert", style:'dim'},
+    {text:'', style:'normal'},
+  ]);
+
+  updateUI(gameState);
+  document.getElementById('cmd-input').focus();
+  drawTrieViz('');
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// API helpers
+// ──────────────────────────────────────────────────────────────────────────────
+async function apiRun(cmd) {
+  const r = await fetch('/api/run', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({cmd}),
+  });
+  return r.json();
+}
+
+async function apiTab(partial) {
+  const r = await fetch('/api/tab', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({partial}),
+  });
+  return r.json();
+}
+
+async function resetGame() {
+  await fetch('/api/reset');
+  document.getElementById('gameover-overlay').classList.remove('active');
+  document.getElementById('output-pane').innerHTML = '';
+  gameState = await fetch('/api/state').then(r => r.json());
+  updateUI(gameState);
+  printLines([
+    {text:'', style:'normal'},
+    {text:'  ── NEW CONNECTION ESTABLISHED ──', style:'header'},
+    {text:'', style:'normal'},
+  ]);
+  document.getElementById('cmd-input').focus();
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Command execution
+// ──────────────────────────────────────────────────────────────────────────────
+async function runCommand(cmd) {
+  cmd = cmd.trim();
+  if (!cmd) return;
+
+  history.unshift(cmd);
+  histIdx = -1;
+
+  // echo
+  const pane = document.getElementById('output-pane');
+  const cwd  = gameState ? gameState.cwd : '/';
+  appendLine({text:`  nexus@breach:${cwd} ► ${cmd}`, style:'cmd'});
+
+  if (cmd.toLowerCase() === 'clear') {
+    pane.innerHTML = '';
+    return;
+  }
+
+  const result = await apiRun(cmd);
+  gameState = result.state;
+
+  // Check if this triggered a puzzle
+  if (gameState.puzzleActive) {
+    // Find the puzzle content from lines
+    showPuzzle(result.lines);
+  } else {
+    printLines(result.lines);
+  }
+
+  updateUI(gameState);
+  drawTrieViz(currentPrefix);
+
+  if (result.gameOver) {
+    setTimeout(() => showGameOver(result.gameWon), 800);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Output rendering
+// ──────────────────────────────────────────────────────────────────────────────
+function printLines(lines) {
+  lines.forEach(l => appendLine(l));
+  const pane = document.getElementById('output-pane');
+  pane.scrollTop = pane.scrollHeight;
+}
+
+function appendLine(l) {
+  const pane = document.getElementById('output-pane');
+  const div  = document.createElement('div');
+  div.className = `line ${l.style}`;
+  div.textContent = l.text || '';
+  pane.appendChild(div);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Sidebar updates
+// ──────────────────────────────────────────────────────────────────────────────
+function updateUI(state) {
+  if (!state) return;
+
+  // header stats
+  document.getElementById('stat-score').textContent = state.score;
+  document.getElementById('stat-cmds').textContent  = state.commandsRun;
+  document.getElementById('mission-badge').textContent = `MISSION ${state.missionId}: ${state.missionTitle}`;
+
+  // prompt
+  document.getElementById('prompt').textContent = `nexus@breach:${state.cwd} ►`;
+
+  // objectives
+  const objList = document.getElementById('obj-list');
+  objList.innerHTML = '';
+  (state.objectives || []).forEach(obj => {
+    const d = document.createElement('div');
+    d.className = `obj-item${obj.done ? ' done' : ''}`;
+    d.innerHTML = `<span class="obj-mark">${obj.done ? '✓' : '○'}</span>
+                   <span class="obj-desc">${obj.desc}</span>`;
+    objList.appendChild(d);
+  });
+
+  // filesystem
+  document.getElementById('fs-path').textContent = state.cwd;
+  const fsList = document.getElementById('fs-list');
+  fsList.innerHTML = '';
+  (state.fsItems || []).forEach(item => {
+    const d = document.createElement('div');
+    const cls = item.locked ? 'locked' : (item.isFile ? 'file' : 'dir');
+    d.className = `fs-item ${cls}`;
+    const icon = item.locked ? '🔒' : (item.isFile ? '📄' : '📁');
+    d.innerHTML = `<span class="fs-icon">${icon}</span>${item.name}${item.isFile ? '' : '/'}`;
+    // click to insert path
+    d.addEventListener('click', () => {
+      const full = state.cwd.replace(/\/$/, '') + '/' + item.name;
+      const inp  = document.getElementById('cmd-input');
+      const parts = inp.value.split(' ');
+      if (parts.length > 1) {
+        parts[parts.length - 1] = full;
+        inp.value = parts.join(' ');
+      } else {
+        inp.value += ' ' + full;
+      }
+      inp.focus();
+      updateSuggestions(inp.value);
+    });
+    fsList.appendChild(d);
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Autocomplete sidebar
+// ──────────────────────────────────────────────────────────────────────────────
+let debounceTimer = null;
+
+async function updateSuggestions(partial) {
+  currentPrefix = partial;
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(async () => {
+    const data = await apiTab(partial);
+    const suggs = data.suggestions || [];
+    const list  = document.getElementById('suggest-list');
+    list.innerHTML = '';
+
+    if (!suggs.length) {
+      const d = document.createElement('div');
+      d.className = 'suggest-item';
+      d.style.color = 'var(--dim)';
+      d.style.fontSize = '11px';
+      d.textContent = '  no matches';
+      list.appendChild(d);
+      drawTrieViz(partial.split(' ').pop());
+      return;
+    }
+
+    suggs.forEach((s, i) => {
+      const d = document.createElement('div');
+      d.className = `suggest-item${i === 0 ? ' top' : ''}`;
+      // highlight matching portion
+      const q = partial.split(' ').pop();
+      if (q && s.startsWith(q)) {
+        d.innerHTML = `<span class="match">${q}</span>${s.slice(q.length)}`;
+      } else {
+        d.textContent = s;
+      }
+      d.addEventListener('click', () => {
+        const inp   = document.getElementById('cmd-input');
+        const parts = inp.value.split(' ');
+        parts[parts.length - 1] = s;
+        inp.value = parts.join(' ');
+        inp.focus();
+        updateSuggestions(inp.value);
+      });
+      list.appendChild(d);
+    });
+
+    drawTrieViz(partial.split(' ').pop());
+  }, 60);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Trie canvas visualiser
+// ──────────────────────────────────────────────────────────────────────────────
+const TRIE_COMMANDS = ['help','ls','cd','cat','pwd','scan','crack','decrypt',
+                        'search','recover','status','missions','clear','exit',
+                        'override','exfil'];
+
+function buildVisTrie(prefix) {
+  // Build a small visible tree from TRIE_COMMANDS matching prefix
+  const matches = TRIE_COMMANDS.filter(c => c.startsWith(prefix.toLowerCase()));
+  // Show at most 8 chars deep, fan out from root
+  const root = {char:'', children:{}, isEnd: false, highlighted: false};
+
+  const words = prefix ? matches : TRIE_COMMANDS.slice(0, 12);
+  for (const word of words) {
+    let node = root;
+    for (let i = 0; i < Math.min(word.length, 7); i++) {
+      const ch = word[i];
+      if (!node.children[ch]) {
+        node.children[ch] = {char:ch, children:{}, isEnd:false, highlighted:false};
+      }
+      node = node.children[ch];
+      if (prefix && word.startsWith(prefix) && i < prefix.length) {
+        node.highlighted = true;
+      }
+    }
+    node.isEnd = true;
+  }
+  return root;
+}
+
+function drawTrieViz(prefix) {
+  const canvas = document.getElementById('trie-canvas');
+  const wrap   = canvas.parentElement;
+  canvas.width  = wrap.clientWidth  - 28;
+  canvas.height = wrap.clientHeight - 36;
+  if (canvas.height < 80) return;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const root = buildVisTrie(prefix || '');
+
+  // layout: BFS assign x positions
+  const nodeList = [];
+  const queue    = [{node: root, depth:0, parent:null, parentX:0, parentY:0}];
+  const depthCounts = {};
+
+  // first pass: count nodes per depth
+  function countDepths(n, d) {
+    depthCounts[d] = (depthCounts[d]||0) + 1;
+    for (const ch of Object.values(n.children)) countDepths(ch, d+1);
+  }
+  countDepths(root, 0);
+
+  const depthIdxs = {};
+  const maxDepth  = Math.max(...Object.keys(depthCounts).map(Number));
+  const nodeH     = canvas.height / (maxDepth + 2);
+  const accent    = '#00ff41';
+  const dim       = '#1a3a1a';
+  const highlight = '#00e5ff';
+
+  function layout(node, depth, parentX, parentY, slotStart, slotEnd) {
+    const midX = (slotStart + slotEnd) / 2;
+    const y    = (depth + 0.8) * nodeH;
+    nodeList.push({node, x: midX, y, parentX, parentY, depth});
+
+    const children = Object.values(node.children);
+    if (!children.length) return;
+    const slotW = (slotEnd - slotStart) / children.length;
+    children.forEach((child, i) => {
+      layout(child, depth+1, midX, y, slotStart + i*slotW, slotStart + (i+1)*slotW);
+    });
+  }
+
+  layout(root, 0, canvas.width/2, 0, 0, canvas.width);
+
+  // draw edges
+  for (const {node, x, y, parentX, parentY, depth} of nodeList) {
+    if (depth === 0) continue;
+    ctx.beginPath();
+    ctx.moveTo(parentX, parentY);
+    ctx.lineTo(x, y);
+    ctx.strokeStyle = node.highlighted ? highlight + '80' : dim;
+    ctx.lineWidth   = node.highlighted ? 1.5 : 0.8;
+    ctx.stroke();
+  }
+
+  // draw nodes
+  for (const {node, x, y} of nodeList) {
+    const r = node.isEnd ? 5 : 3;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    if (node.highlighted) {
+      ctx.fillStyle = highlight;
+      ctx.shadowColor = highlight;
+      ctx.shadowBlur  = 6;
+    } else if (node.isEnd) {
+      ctx.fillStyle = accent;
+      ctx.shadowColor = accent;
+      ctx.shadowBlur  = 4;
+    } else {
+      ctx.fillStyle = '#1f3f1f';
+      ctx.shadowBlur = 0;
+    }
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // label
+    if (node.char && canvas.width > 180) {
+      ctx.fillStyle   = node.highlighted ? highlight : (node.isEnd ? accent : '#3a6a3a');
+      ctx.font        = `${node.highlighted ? 'bold ' : ''}10px Share Tech Mono, monospace`;
+      ctx.textAlign   = 'center';
+      ctx.fillText(node.char.toUpperCase(), x, y - 6);
+    }
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Puzzle overlay
+// ──────────────────────────────────────────────────────────────────────────────
+function showPuzzle(lines) {
+  // Extract info from output lines
+  let cipher = '', hint = '', frags = [];
+  for (const l of lines) {
+    if (l.text && l.text.trim().match(/^[A-Z0-9]{10,}/)) cipher = l.text.trim();
+    if (l.text && l.text.includes('HINT:')) hint = l.text.replace(/.*HINT:\s*/, '');
+    if (l.text && l.text.startsWith('    •')) frags.push(l.text.replace('    •', '').trim());
+  }
+
+  // Also print lines to output
+  printLines(lines);
+
+  document.getElementById('puzzle-cipher').textContent  = cipher;
+  document.getElementById('puzzle-hint').textContent    = '🔍 ' + hint;
+  const fragsEl = document.getElementById('puzzle-frags');
+  fragsEl.innerHTML = `<span style="color:var(--dim)">TRIE fragments found: </span>` +
+    frags.map(f => `<span>${f}</span>`).join('');
+  document.getElementById('puzzle-feedback').textContent = '';
+  document.getElementById('puzzle-input').value = '';
+  document.getElementById('puzzle-overlay').classList.add('active');
+  document.getElementById('puzzle-input').focus();
+}
+
+async function submitPuzzle() {
+  const inp   = document.getElementById('puzzle-input');
+  const guess = inp.value.trim();
+  if (!guess) return;
+
+  const result = await apiRun(guess);
+  gameState    = result.state;
+  const fb     = document.getElementById('puzzle-feedback');
+
+  const success = result.lines.some(l => l.text && l.text.includes('CIPHER CRACKED'));
+
+  if (success || !gameState.puzzleActive) {
+    fb.style.color   = 'var(--success)';
+    fb.textContent   = '✓ CIPHER CRACKED — access granted';
+    printLines(result.lines);
+    updateUI(gameState);
+    setTimeout(() => {
+      document.getElementById('puzzle-overlay').classList.remove('active');
+      document.getElementById('cmd-input').focus();
+    }, 900);
+  } else {
+    fb.style.color   = 'var(--error)';
+    fb.textContent   = result.lines.find(l => l.style === 'error')?.text || '✗ Incorrect — try again';
+    inp.value        = '';
+    inp.focus();
+    // shake
+    const box = document.getElementById('puzzle-box');
+    box.style.transform = 'translateX(-8px)';
+    setTimeout(() => box.style.transform = 'translateX(8px)', 80);
+    setTimeout(() => box.style.transform = '', 160);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Game over
+// ──────────────────────────────────────────────────────────────────────────────
+function showGameOver(won) {
+  const overlay = document.getElementById('gameover-overlay');
+  const title   = document.getElementById('gameover-title');
+  const stats   = document.getElementById('gameover-stats');
+
+  title.className  = won ? 'won' : 'lost';
+  title.textContent = won ? 'MISSION COMPLETE' : 'CONNECTION TERMINATED';
+  stats.innerHTML  = `
+    Score:  ${gameState?.score ?? 0}<br>
+    Commands run:  ${gameState?.commandsRun ?? 0}<br>
+    ${won ? 'NEXUS-7 fully compromised. All intel exfiltrated.' : 'Stay dark. Try again.'}
+  `;
+  overlay.classList.add('active');
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Input handling
+// ──────────────────────────────────────────────────────────────────────────────
+const inp = document.getElementById('cmd-input');
+
+inp.addEventListener('keydown', async e => {
+  if (e.key === 'Enter') {
+    const cmd = inp.value;
+    inp.value = '';
+    document.getElementById('suggest-list').innerHTML = '';
+    await runCommand(cmd);
+
+  } else if (e.key === 'Tab') {
+    e.preventDefault();
+    const data  = await apiTab(inp.value);
+    const suggs = data.suggestions || [];
+    if (suggs.length === 1) {
+      const parts = inp.value.split(' ');
+      parts[parts.length - 1] = suggs[0];
+      inp.value = parts.join(' ');
+    } else if (suggs.length > 1) {
+      // common prefix extension
+      const q      = inp.value.split(' ').pop();
+      const common = suggs.reduce((a, b) => {
+        let i = 0;
+        while (i < a.length && i < b.length && a[i] === b[i]) i++;
+        return a.slice(0, i);
+      });
+      if (common.length > q.length) {
+        const parts = inp.value.split(' ');
+        parts[parts.length - 1] = common;
+        inp.value = parts.join(' ');
+      }
+    }
+    updateSuggestions(inp.value);
+
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (histIdx < history.length - 1) {
+      histIdx++;
+      inp.value = history[histIdx];
+    }
+
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (histIdx > 0) { histIdx--; inp.value = history[histIdx]; }
+    else { histIdx = -1; inp.value = ''; }
+  }
+});
+
+inp.addEventListener('input', () => updateSuggestions(inp.value));
+
+// Puzzle input
+document.getElementById('puzzle-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitPuzzle();
+  if (e.key === 'Escape') {
+    document.getElementById('puzzle-overlay').classList.remove('active');
+    document.getElementById('cmd-input').focus();
+  }
+});
+document.getElementById('puzzle-submit').addEventListener('click', submitPuzzle);
+
+// Keep input focused
+document.addEventListener('click', e => {
+  const overlay = document.getElementById('puzzle-overlay');
+  if (!overlay.classList.contains('active')) {
+    document.getElementById('cmd-input').focus();
+  }
+});
+
+// Resize trie canvas on window resize
+window.addEventListener('resize', () => drawTrieViz(currentPrefix));
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Util
+// ──────────────────────────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Start
+// ──────────────────────────────────────────────────────────────────────────────
+boot();
+</script>
+</body>
+</html>
